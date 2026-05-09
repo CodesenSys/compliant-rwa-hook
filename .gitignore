@@ -1,0 +1,32 @@
+# Foundry
+out/
+cache/
+broadcast/
+lib/
+
+# Env
+.env
+.env.*
+!.env.example
+
+# Editors
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Logs
+*.log
+logs/
+
+# Build artifacts
+artifacts/
+typechain/
+typechain-types/
+
+# Coverage
+coverage/
+lcov.info
+
+# Snapshots
+.gas-snapshot.tmp
