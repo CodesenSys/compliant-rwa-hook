@@ -519,7 +519,7 @@ Contributions are welcome. This is an open-source project — pull requests, iss
 1. Run `forge build` — must compile with zero warnings
 2. Run `forge test` — all tests must pass
 3. Run `forge fmt` — code must be formatted
-4. Follow the coding standards in [`CLAUDE.md`](./CLAUDE.md) — naming conventions, CEI pattern, NatSpec requirements, and test naming are enforced
+4. Follow the coding standards documented below — naming conventions (`camelCase` functions, `UPPER_SNAKE_CASE` constants, `_camelCase` internals), CEI pattern, NatSpec on every public function, and `test_<function>_<condition>` test naming
 
 **Opening issues:**
 
