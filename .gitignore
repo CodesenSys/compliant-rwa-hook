@@ -31,3 +31,4 @@ lcov.info
 # Snapshots
 .gas-snapshot.tmp
 docs/
+CLAUDE.md
