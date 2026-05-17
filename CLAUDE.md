@@ -2,7 +2,7 @@
 
 > Authoritative instruction file for any Claude (or other LLM agent) working on this codebase.
 > Read this file in full before generating, modifying, or reviewing any code.
-> Update the **Progress**, **Marketing Log**, and **Learning Log** sections at the end of every working session.
+> Update the **Progress** section at the end of every working session.
 
 ---
 
@@ -513,46 +513,7 @@ forge test --match-path test/invariant/* --fuzz-runs 100000
 
 ---
 
-## 9. Marketing Capture Log
-
-> Every shipped milestone is content. Capture it here so it doesn't get lost.
-
-| Date | Phase | Asset | Status | Channel |
-|---|---|---|---|---|
-| — | — | — | — | — |
-
-**Standing assets to produce:**
-- [ ] Architecture diagram (clean SVG, dark theme — matches CodesenSys aesthetic)
-- [ ] Gas profile table (paste from `forge snapshot`)
-- [ ] Live Sepolia / Base Sepolia deployment links
-- [ ] Demo video (deploy + denied swap + allowed swap)
-- [ ] LinkedIn long-form post
-- [ ] Twitter/X technical thread
-- [ ] CodesenSys case study page
-
----
-
-## 10. Learning Log
-
-> Concepts mastered, references that hit, things to revisit.
-
-| Date | Concept | Reference | Confidence (1–5) |
-|---|---|---|---|
-| — | — | — | — |
-
-**Concepts to master before declaring v0.1 done:**
-- [ ] V4 hook address mining (HookMiner internals)
-- [ ] `sender` vs. user resolution in V4 swaps
-- [ ] BeforeSwapDelta encoding
-- [ ] Timelock pattern (read OZ TimelockController)
-- [ ] Solady MerkleProofLib internals (assembly)
-- [ ] AccessControl role granting / revoking semantics
-- [ ] CREATE2 salt computation
-- [ ] Foundry scripting and broadcast modes
-
----
-
-## 11. Definition of Done — v0.1.0
+## 9. Definition of Done — v0.1.0
 
 The project is releasable as `v0.1.0` when **all** of the following are true:
 

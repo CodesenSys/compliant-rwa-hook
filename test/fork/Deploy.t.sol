@@ -63,10 +63,11 @@ contract DeployTest is Test {
     /* ---------------------------------------------------------------------- */
 
     function setUp() public {
-        // Skip when no fork is configured (CI without RPC).
+        // Skip when no fork is configured (CI without RPC) or when running without
+        // --fork-url (pm.code.length == 0 means the address has no code in this context).
         address pm = vm.envOr("POOL_MANAGER", address(0));
-        if (pm == address(0)) {
-            console2.log("DeployTest: POOL_MANAGER not set - skipping fork tests.");
+        if (pm == address(0) || pm.code.length == 0) {
+            console2.log("DeployTest: POOL_MANAGER not available on this fork - skipping.");
             return;
         }
         poolManager = IPoolManager(pm);
@@ -79,8 +80,10 @@ contract DeployTest is Test {
         registry = new ComplianceRegistry(deployer, deployer, deployer);
 
         // ── 2. Mine + deploy hook ───────────────────────────────────────────
+        // In tests, `new Contract{salt:}` deploys from msg.sender (deployer), not
+        // from CREATE2_DEPLOYER. HookMiner must use the same address as the deployer.
         (address hookAddr, bytes32 salt) = HookMiner.find(
-            CREATE2_DEPLOYER,
+            deployer,
             HOOK_FLAGS,
             type(CompliantRWAHook).creationCode,
             abi.encode(poolManager, address(registry))
