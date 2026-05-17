@@ -24,29 +24,87 @@ contract IdentityBridgeTest is Test {
     address        internal owner = address(0xAAA);
     address        internal user  = address(0xBEEF);
 
+    // ISO 3166-1 numeric: 840 = United States
+    uint16 internal constant COUNTRY_US = 840;
+
     function setUp() public {
-        mock = new MockTRex();
+        mock   = new MockTRex();
         bridge = new IdentityBridge(IERC3643Bridge(address(mock)), owner);
     }
 
+    /* -------------------- Disabled bridge -------------------- */
+
     function test_disabledBridge_returnsFalse() public {
         IdentityBridge disabled = new IdentityBridge(IERC3643Bridge(address(0)), owner);
-        // TODO: implement — assert disabled.isCompliant(user, bytes2(0)) == false
+        assertFalse(disabled.isCompliant(user, bytes2(0)));
     }
+
+    /* -------------------- Verified / unverified -------------- */
 
     function test_isCompliant_unverifiedUser_returnsFalse() public {
-        // TODO: implement — mock.verified[user] = false; assert bridge.isCompliant returns false
-    }
-
-    function test_isCompliant_verifiedUser_blockedJurisdiction_returnsFalse() public {
-        // TODO: implement
+        mock.setVerified(user, false);
+        assertFalse(bridge.isCompliant(user, bytes2(0)));
     }
 
     function test_isCompliant_verifiedUser_allowedJurisdiction_returnsTrue() public {
-        // TODO: implement
+        mock.setVerified(user, true);
+        mock.setCountry(user, COUNTRY_US);
+        // US is NOT on the blocklist — should return true.
+        assertTrue(bridge.isCompliant(user, bytes2(0)));
     }
 
+    /* -------------------- Jurisdiction blocking -------------- */
+
+    function test_isCompliant_verifiedUser_blockedJurisdiction_returnsFalse() public {
+        mock.setVerified(user, true);
+        mock.setCountry(user, COUNTRY_US);
+
+        // Block US via the bridge's own blocklist.
+        vm.prank(owner);
+        bridge.setJurisdictionBlocked(COUNTRY_US, true);
+
+        assertFalse(bridge.isCompliant(user, bytes2(0)));
+    }
+
+    function test_isCompliant_jurisdictionHint_overridesRegistryCountry() public {
+        mock.setVerified(user, true);
+        // Registry says user is from country 1 (not blocked).
+        mock.setCountry(user, 1);
+
+        // Caller hints that user is from COUNTRY_US.
+        // COUNTRY_US (840 = 0x0348) encoded as bytes2: big-endian → 0x0348.
+        bytes2 hint = bytes2(uint16(COUNTRY_US));
+
+        // Block the hinted country.
+        vm.prank(owner);
+        bridge.setJurisdictionBlocked(COUNTRY_US, true);
+
+        // The hint takes priority over the registry country → blocked.
+        assertFalse(bridge.isCompliant(user, hint));
+    }
+
+    function test_isCompliant_jurisdictionHint_nonZero_allowedCountry_returnsTrue() public {
+        mock.setVerified(user, true);
+        bytes2 hint = bytes2(uint16(COUNTRY_US));
+        // US is not blocked.
+        assertTrue(bridge.isCompliant(user, hint));
+    }
+
+    /* -------------------- Access control --------------------- */
+
     function test_setJurisdictionBlocked_onlyOwner() public {
-        // TODO: implement — vm.expectRevert(IdentityBridge.NotOwner.selector)
+        vm.prank(address(0xBAD));
+        vm.expectRevert(IdentityBridge.NotOwner.selector);
+        bridge.setJurisdictionBlocked(COUNTRY_US, true);
+    }
+
+    function test_setJurisdictionBlocked_emitsEvent() public {
+        vm.expectEmit(true, false, false, true);
+        emit IdentityBridge.JurisdictionBlocked(COUNTRY_US, true);
+
+        vm.prank(owner);
+        bridge.setJurisdictionBlocked(COUNTRY_US, true);
+
+        assertTrue(bridge.isJurisdictionBlocked(COUNTRY_US));
     }
 }

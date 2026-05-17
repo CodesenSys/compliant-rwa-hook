@@ -17,12 +17,12 @@ contract IdentityBridge {
 
     /// @notice The underlying ERC-3643 IdentityRegistry. `address(0)` disables
     ///         the bridge and `isCompliant` short-circuits to `false`.
-    IERC3643Bridge public immutable tRexRegistry;
+    IERC3643Bridge public immutable T_REX_REGISTRY;
 
     /// @notice Owner authorised to mutate jurisdictional blocks here. In
     ///         production wire this to the same address as the
     ///         ComplianceRegistry's COMPLIANCE_ROLE for consistency.
-    address public immutable owner;
+    address public immutable OWNER;
 
     /// @notice Blocked jurisdictions, keyed by ISO 3166-1 numeric code.
     mapping(uint16 country => bool blocked) internal _blockedJurisdictions;
@@ -42,15 +42,15 @@ contract IdentityBridge {
     /// @param  _tRexRegistry The ERC-3643 IdentityRegistry to read from.
     /// @param  _owner        Address authorised to mutate jurisdictional state.
     constructor(IERC3643Bridge _tRexRegistry, address _owner) {
-        tRexRegistry = _tRexRegistry;
-        owner = _owner;
+        T_REX_REGISTRY = _tRexRegistry;
+        OWNER = _owner;
     }
 
     /* ------------------------------- Mutators -------------------------------- */
 
     /// @notice Block or unblock a jurisdiction by ISO 3166-1 numeric code.
     function setJurisdictionBlocked(uint16 country, bool blocked) external {
-        if (msg.sender != owner) revert NotOwner();
+        if (msg.sender != OWNER) revert NotOwner();
         _blockedJurisdictions[country] = blocked;
         emit JurisdictionBlocked(country, blocked);
     }
@@ -67,15 +67,20 @@ contract IdentityBridge {
     ///                      a separate KYC source). Pass `bytes2(0)` to skip
     ///                      and rely solely on the registry's `investorCountry`.
     function isCompliant(address account, bytes2 jurisdiction) external view returns (bool) {
-        if (address(tRexRegistry) == address(0)) return false;
+        if (address(T_REX_REGISTRY) == address(0)) return false;
 
-        if (!tRexRegistry.isVerified(account)) return false;
+        if (!T_REX_REGISTRY.isVerified(account)) return false;
 
-        // TODO: implement
-        // - if `jurisdiction` is non-zero, check _blockedJurisdictions[uint16(jurisdiction)]
-        // - else fetch tRexRegistry.investorCountry(account) and check
-        // - return true only if NOT blocked
-        revert("TODO: implement isCompliant jurisdictional path");
+        // Resolve the numeric country code. If the caller supplied a hint,
+        // use it (interpreted as big-endian uint16); otherwise ask T-REX.
+        uint16 country;
+        if (jurisdiction != bytes2(0)) {
+            country = uint16(uint8(jurisdiction[0])) << 8 | uint16(uint8(jurisdiction[1]));
+        } else {
+            country = T_REX_REGISTRY.investorCountry(account);
+        }
+
+        return !_blockedJurisdictions[country];
     }
 
     /// @notice True if a jurisdiction is on the bridge's blocklist.

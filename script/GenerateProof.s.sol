@@ -8,11 +8,12 @@ import { AccreditationTier } from "../src/types/ComplianceTypes.sol";
 
 /// @title  GenerateProof
 /// @notice Helper script: given an address + tier, prints the Merkle leaf
-///         hash. The full proof must be generated off-chain (TypeScript with
-///         @openzeppelin/merkle-tree). This script exists so a developer can
-///         confirm the on-chain leaf encoding matches their off-chain tooling.
+///         hash. The full proof must be generated off-chain using TypeScript
+///         with the openzeppelin/merkle-tree package. This script exists so
+///         a developer can confirm the on-chain leaf encoding matches their
+///         off-chain tooling.
 contract GenerateProof is Script {
-    function run(address account, uint8 rawTier) external view {
+    function run(address account, uint8 rawTier) external pure {
         AccreditationTier tier = AccreditationTier(rawTier);
         bytes32 leaf = ComplianceLib.leafHash(account, tier);
 

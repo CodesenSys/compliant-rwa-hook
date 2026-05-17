@@ -4,7 +4,7 @@ pragma solidity 0.8.26;
 import { Test } from "forge-std/Test.sol";
 
 import { ComplianceRegistry } from "../../src/ComplianceRegistry.sol";
-import { AccreditationTier, ROOT_UPDATE_DELAY } from "../../src/types/ComplianceTypes.sol";
+import { ROOT_UPDATE_DELAY } from "../../src/types/ComplianceTypes.sol";
 
 /// @notice Stateful handler — constrains the action space for the invariant runner.
 ///         Without a handler, Foundry's invariant runner will call any external

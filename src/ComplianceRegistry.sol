@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.26;
+pragma solidity ^0.8.26;
 
 import { AccessControl } from "openzeppelin-contracts/access/AccessControl.sol";
 
@@ -55,13 +55,21 @@ contract ComplianceRegistry is IComplianceRegistry, AccessControl {
     /* --------------------------- Modifiers (local) --------------------------- */
 
     modifier onlyOperator() {
-        if (!hasRole(OPERATOR_ROLE, msg.sender)) revert UnauthorizedOperator();
+        _checkOperator();
         _;
     }
 
     modifier onlyCompliance() {
-        if (!hasRole(COMPLIANCE_ROLE, msg.sender)) revert UnauthorizedOperator();
+        _checkCompliance();
         _;
+    }
+
+    function _checkOperator() internal view {
+        if (!hasRole(OPERATOR_ROLE, msg.sender)) revert UnauthorizedOperator();
+    }
+
+    function _checkCompliance() internal view {
+        if (!hasRole(COMPLIANCE_ROLE, msg.sender)) revert UnauthorizedOperator();
     }
 
     /* --------------------------- Root update flow ---------------------------- */
@@ -69,54 +77,54 @@ contract ComplianceRegistry is IComplianceRegistry, AccessControl {
     /// @inheritdoc IComplianceRegistry
     function proposeRootUpdate(bytes32 newRoot) external onlyOperator {
         if (newRoot == bytes32(0)) revert InvalidMerkleRoot();
-        // TODO: implement
-        // - record _pendingRoot with effectiveAt = now + ROOT_UPDATE_DELAY
-        // - emit RootUpdateProposed
-        revert("TODO: implement proposeRootUpdate");
+        uint64 effectiveAt = uint64(block.timestamp) + ROOT_UPDATE_DELAY;
+        _pendingRoot = PendingRootUpdate({ root: newRoot, effectiveAt: effectiveAt });
+        emit RootUpdateProposed(newRoot, effectiveAt);
     }
 
     /// @inheritdoc IComplianceRegistry
+    /// @dev CEI: read pending root into memory first, then validate (Checks),
+    ///      then mutate storage (Effects). No external calls (no Interactions needed).
     function applyRootUpdate() external {
-        // TODO: implement
-        // - revert TooEarly if block.timestamp < _pendingRoot.effectiveAt
-        // - revert RootStale if pendingRoot.root == bytes32(0)
-        // - assign _merkleRoot = _pendingRoot.root, clear _pendingRoot
-        // - emit RootUpdated
-        revert("TODO: implement applyRootUpdate");
+        PendingRootUpdate memory pending = _pendingRoot;
+        if (pending.root == bytes32(0)) revert RootStale();
+        if (block.timestamp < pending.effectiveAt) revert TooEarly();
+        _merkleRoot = pending.root;
+        delete _pendingRoot;
+        emit RootUpdated(pending.root);
     }
 
     /// @inheritdoc IComplianceRegistry
     function cancelPendingRoot() external onlyOperator {
-        // TODO: implement
-        // - emit RootUpdateCancelled with the cancelled root
-        // - delete _pendingRoot
-        revert("TODO: implement cancelPendingRoot");
+        bytes32 cancelled = _pendingRoot.root;
+        delete _pendingRoot;
+        emit RootUpdateCancelled(cancelled);
     }
 
     /* ------------------------------ Setters --------------------------------- */
 
     /// @inheritdoc IComplianceRegistry
     function setJurisdictionBlocked(bytes2 country, bool blocked) external onlyCompliance {
-        // TODO: implement + emit JurisdictionBlockedSet
-        revert("TODO: implement setJurisdictionBlocked");
+        _blockedJurisdictions[country] = blocked;
+        emit JurisdictionBlockedSet(country, blocked);
     }
 
     /// @inheritdoc IComplianceRegistry
     function setCountry(address account, bytes2 country) external onlyOperator {
-        // TODO: implement + emit CountrySet
-        revert("TODO: implement setCountry");
+        _countryOf[account] = country;
+        emit CountrySet(account, country);
     }
 
     /// @inheritdoc IComplianceRegistry
     function setAccreditation(address account, AccreditationTier tier) external onlyOperator {
-        // TODO: implement + emit AccreditationSet
-        revert("TODO: implement setAccreditation");
+        _accreditation[account] = tier;
+        emit AccreditationSet(account, tier);
     }
 
     /// @inheritdoc IComplianceRegistry
     function setLockup(address account, uint64 expiry) external onlyOperator {
-        // TODO: implement + emit LockupSet
-        revert("TODO: implement setLockup");
+        _lockupExpiry[account] = expiry;
+        emit LockupSet(account, expiry);
     }
 
     /// @inheritdoc IComplianceRegistry

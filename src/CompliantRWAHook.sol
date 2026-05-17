@@ -3,11 +3,13 @@ pragma solidity 0.8.26;
 
 import { BaseHook } from "v4-periphery/src/utils/BaseHook.sol";
 import { Hooks } from "v4-core/src/libraries/Hooks.sol";
+import { IHooks } from "v4-core/src/interfaces/IHooks.sol";
 import { IPoolManager } from "v4-core/src/interfaces/IPoolManager.sol";
 import { PoolKey } from "v4-core/src/types/PoolKey.sol";
 import { PoolId, PoolIdLibrary } from "v4-core/src/types/PoolId.sol";
 import { BalanceDelta } from "v4-core/src/types/BalanceDelta.sol";
 import { BeforeSwapDelta, BeforeSwapDeltaLibrary } from "v4-core/src/types/BeforeSwapDelta.sol";
+import { SwapParams, ModifyLiquidityParams } from "v4-core/src/types/PoolOperation.sol";
 
 import { IComplianceRegistry } from "./interfaces/IComplianceRegistry.sol";
 import { ICompliantRWAHook } from "./interfaces/ICompliantRWAHook.sol";
@@ -23,7 +25,7 @@ import {
 /// @notice Uniswap V4 hook that gates swap and liquidity actions on a
 ///         compliance check (Merkle-proven KYC, jurisdiction, lockup, tier).
 /// @dev    Reads compliance state from a separate ComplianceRegistry so that
-///         the registry can be updated without redeploying the hook (the
+///         the REGISTRY can be updated without redeploying the hook (the
 ///         hook's address encodes its V4 permissions and is therefore tied
 ///         to its bytecode and salt forever).
 ///
@@ -42,7 +44,7 @@ contract CompliantRWAHook is BaseHook, ICompliantRWAHook {
     /* -------------------------------- Storage -------------------------------- */
 
     /// @notice The compliance state oracle.
-    IComplianceRegistry public immutable registry;
+    IComplianceRegistry public immutable REGISTRY;
 
     /// @notice Per-pool minimum accreditation tier override. If unset
     ///         (Tier.None), the hook falls back to the tier encoded in
@@ -51,11 +53,11 @@ contract CompliantRWAHook is BaseHook, ICompliantRWAHook {
 
     /* ------------------------------ Constructor ------------------------------ */
 
-    /// @notice Deploy the hook. The `_poolManager` and `_registry` references
+    /// @notice Deploy the hook. The `_poolManager` and `_REGISTRY` references
     ///         are immutable — re-pointing requires a fresh hook deployment
     ///         (and re-mined address).
     constructor(IPoolManager _poolManager, IComplianceRegistry _registry) BaseHook(_poolManager) {
-        registry = _registry;
+        REGISTRY = _registry;
     }
 
     /* ------------------------------ Permissions ------------------------------ */
@@ -88,63 +90,89 @@ contract CompliantRWAHook is BaseHook, ICompliantRWAHook {
     /// @notice Verify swapper compliance before the swap is settled.
     /// @dev    `sender` is the swap router. The actual user must be encoded
     ///         in `hookData` as `(address user, bytes32[] proof, AccreditationTier tier)`.
+    ///         The effective tier is max(minTierByPool[pool], tier from hookData).
     function _beforeSwap(
-        address, /* sender (router) */
+        address, /* sender (router — NOT the user) */
         PoolKey calldata key,
-        IPoolManager.SwapParams calldata, /* params */
+        SwapParams calldata, /* params */
         bytes calldata hookData
-    ) internal override returns (bytes4, BeforeSwapDelta, uint24) {
-        if (registry.paused()) revert ComplianceViolation(ComplianceError.POOL_PAUSED);
+    ) internal view override returns (bytes4, BeforeSwapDelta, uint24) {
+        if (REGISTRY.paused()) revert ComplianceViolation(ComplianceError.POOL_PAUSED);
 
-        // TODO: implement
-        // - decode hookData -> (address user, bytes32[] proof, AccreditationTier tier)
-        // - resolve effective minimum tier: minTierByPool[key.toId()] OR tier from hookData
-        // - call _verifyCompliance(user, proof, effectiveTier)
-        revert("TODO: implement _beforeSwap");
+        (address user, bytes32[] memory proof, AccreditationTier tier) =
+            abi.decode(hookData, (address, bytes32[], AccreditationTier));
+
+        // Pool-level minimum overrides caller-supplied tier when it's stricter.
+        AccreditationTier effectiveTier = minTierByPool[key.toId()];
+        if (uint8(effectiveTier) < uint8(tier)) effectiveTier = tier;
+
+        _verifyCompliance(user, proof, effectiveTier);
+
+        return (IHooks.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
     }
 
     /// @notice Emit a compliance audit event after a successful swap.
+    /// @dev    Re-decodes hookData to recover user and tier for the event.
+    ///         Gas cost is marginal since the bytes are already in calldata.
     function _afterSwap(
         address, /* sender */
         PoolKey calldata key,
-        IPoolManager.SwapParams calldata, /* params */
+        SwapParams calldata, /* params */
         BalanceDelta delta,
         bytes calldata hookData
     ) internal override returns (bytes4, int128) {
-        // TODO: implement
-        // - decode hookData enough to recover `user` and `tier`
-        // - emit ComplianceAuditEvent(user, key.toId(), delta.amount0(), delta.amount1(), tier)
-        revert("TODO: implement _afterSwap");
+        (address user,, AccreditationTier tier) =
+            abi.decode(hookData, (address, bytes32[], AccreditationTier));
+
+        emit ComplianceAuditEvent(
+            user,
+            PoolId.unwrap(key.toId()),
+            int256(delta.amount0()),
+            int256(delta.amount1()),
+            tier
+        );
+
+        return (IHooks.afterSwap.selector, 0);
     }
 
     /// @notice Verify LP compliance before liquidity is added.
+    /// @dev    hookData format: `(address lp, bytes32[] proof, AccreditationTier tier)`.
+    ///         Effective tier = max(minTierByPool[pool], tier from hookData).
     function _beforeAddLiquidity(
         address, /* sender */
         PoolKey calldata key,
-        IPoolManager.ModifyLiquidityParams calldata, /* params */
+        ModifyLiquidityParams calldata, /* params */
         bytes calldata hookData
-    ) internal override returns (bytes4) {
-        if (registry.paused()) revert ComplianceViolation(ComplianceError.POOL_PAUSED);
+    ) internal view override returns (bytes4) {
+        if (REGISTRY.paused()) revert ComplianceViolation(ComplianceError.POOL_PAUSED);
 
-        // TODO: implement
-        // - decode hookData -> (address lp, bytes32[] proof, AccreditationTier tier)
-        // - call _verifyCompliance(lp, proof, tier)
-        // - additionally enforce a minimum tier if minTierByPool[key.toId()] is set
-        revert("TODO: implement _beforeAddLiquidity");
+        (address lp, bytes32[] memory proof, AccreditationTier tier) =
+            abi.decode(hookData, (address, bytes32[], AccreditationTier));
+
+        AccreditationTier effectiveTier = minTierByPool[key.toId()];
+        if (uint8(effectiveTier) < uint8(tier)) effectiveTier = tier;
+
+        _verifyCompliance(lp, proof, effectiveTier);
+
+        return IHooks.beforeAddLiquidity.selector;
     }
 
     /// @notice Honour lockup window before liquidity is removed.
+    /// @dev    hookData format: `(address lp)`. Only the address is needed;
+    ///         the lockup state is read entirely from the REGISTRY.
     function _beforeRemoveLiquidity(
         address, /* sender */
         PoolKey calldata, /* key */
-        IPoolManager.ModifyLiquidityParams calldata, /* params */
+        ModifyLiquidityParams calldata, /* params */
         bytes calldata hookData
-    ) internal override returns (bytes4) {
-        // TODO: implement
-        // - decode hookData -> (address lp)
-        // - check registry.lockupExpiryOf(lp) <= block.timestamp
-        // - revert ComplianceViolation(ComplianceError.LOCKUP_ACTIVE) otherwise
-        revert("TODO: implement _beforeRemoveLiquidity");
+    ) internal view override returns (bytes4) {
+        address lp = abi.decode(hookData, (address));
+
+        if (block.timestamp < REGISTRY.lockupExpiryOf(lp)) {
+            revert ComplianceViolation(ComplianceError.LOCKUP_ACTIVE);
+        }
+
+        return IHooks.beforeRemoveLiquidity.selector;
     }
 
     /* --------------------------- Internal compliance ------------------------- */
@@ -159,37 +187,31 @@ contract CompliantRWAHook is BaseHook, ICompliantRWAHook {
         AccreditationTier requiredTier
     ) internal view {
         // 1. Lockup
-        if (block.timestamp < registry.lockupExpiryOf(account)) {
+        if (block.timestamp < REGISTRY.lockupExpiryOf(account)) {
             revert ComplianceViolation(ComplianceError.LOCKUP_ACTIVE);
         }
 
         // 2. Jurisdiction
-        if (registry.isJurisdictionBlocked(registry.countryOf(account))) {
+        if (REGISTRY.isJurisdictionBlocked(REGISTRY.countryOf(account))) {
             revert ComplianceViolation(ComplianceError.BLOCKED_JURISDICTION);
         }
 
         // 3. Tier (read on-chain accreditation; a Merkle leaf can claim a
-        //    higher tier than the registry holds — that's an attack vector)
-        if (uint8(registry.accreditationOf(account)) < uint8(requiredTier)) {
+        //    higher tier than the REGISTRY holds — that's an attack vector)
+        if (uint8(REGISTRY.accreditationOf(account)) < uint8(requiredTier)) {
             revert ComplianceViolation(ComplianceError.INSUFFICIENT_TIER);
         }
 
         // 4. Membership (Merkle proof against current root)
-        if (!ComplianceLib.verifyMembership(registry.merkleRoot(), proof, account, requiredTier)) {
+        if (!ComplianceLib.verifyMembership(REGISTRY.merkleRoot(), proof, account, requiredTier)) {
             revert ComplianceViolation(ComplianceError.NOT_WHITELISTED);
         }
     }
-
-    /* -------------------------------- Admin ---------------------------------- */
-
-    // NOTE: per the architecture, the hook itself is intentionally minimal in
-    // admin surface. Per-pool minimum tier configuration COULD live here, but
-    // for v0.1 it lives in PoolKey extra-data parsing. Revisit in v0.2.
 
     /* --------------------------------- Views --------------------------------- */
 
     /// @inheritdoc ICompliantRWAHook
     function complianceRegistry() external view returns (address) {
-        return address(registry);
+        return address(REGISTRY);
     }
 }

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.26;
+pragma solidity ^0.8.26;
 
 /// @title  ComplianceTypes
 /// @author CodesenSys (https://codesensys.com)
@@ -25,6 +25,16 @@ enum ComplianceError {
     INSUFFICIENT_TIER,
     POOL_PAUSED,
     INVALID_PROOF
+}
+
+/// @notice Vesting schedule attached to a lockup position. Tracks cliff,
+///         full-vest timestamp, and the notional amount locked.
+/// @dev    cliff + vestingEnd (96 bits) + amount (128 bits) = 224 bits,
+///         fitting in one slot with 32 bits to spare for future extension.
+struct LockupSchedule {
+    uint48 cliff; // earliest timestamp at which any amount may move
+    uint48 vestingEnd; // timestamp at which the full amount is released
+    uint128 amount; // token amount subject to this schedule
 }
 
 /// @notice Storage record for a pending Merkle root update. Updates are
@@ -64,13 +74,13 @@ error NotInitialized();
 /*                                  Constants                                 */
 /* -------------------------------------------------------------------------- */
 
-/// @notice Delay between proposing and applying a Merkle root update.
-/// @dev    24 hours. Non-configurable by design — predictability is the point.
+// Delay between proposing and applying a Merkle root update.
+// 24 hours. Non-configurable by design — predictability is the point.
 uint64 constant ROOT_UPDATE_DELAY = 24 hours;
 
-/// @notice Hard cap on lockup durations to prevent griefing/admin error.
+// Hard cap on lockup durations to prevent griefing/admin error.
 uint64 constant MAX_LOCKUP_DURATION = 3650 days; // ~10 years
 
-/// @notice Domain separator for Merkle leaf hashing. Versioned to allow
-///         non-conflicting reuse across protocol revisions.
+// Domain separator for Merkle leaf hashing. Versioned to allow
+// non-conflicting reuse across protocol revisions.
 bytes32 constant LEAF_DOMAIN = keccak256("CodesenSys.RWA.Compliance.v1");

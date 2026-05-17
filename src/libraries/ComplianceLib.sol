@@ -16,8 +16,8 @@ library ComplianceLib {
     /// @param  tier    The accreditation tier the off-chain process granted.
     /// @return leaf    The keccak256 hash to use as the Merkle leaf.
     function leafHash(address account, AccreditationTier tier) internal pure returns (bytes32 leaf) {
-        // TODO: implement — keccak256(abi.encodePacked(LEAF_DOMAIN, account, uint8(tier)))
-        // Choose abi.encode vs. abi.encodePacked deliberately. Document why.
+        // abi.encodePacked is safe here: all fields are fixed-width (bytes32, address, uint8)
+        // so there is no ambiguity in the packed layout and no collision risk between fields.
         leaf = keccak256(abi.encodePacked(LEAF_DOMAIN, account, uint8(tier)));
     }
 
@@ -37,9 +37,8 @@ library ComplianceLib {
         address account,
         AccreditationTier tier
     ) internal pure returns (bool ok) {
-        // TODO: implement — compute leaf via leafHash, then walk the proof
-        // hashing pairs in sorted order (matching @openzeppelin/merkle-tree's
-        // StandardMerkleTree convention).
+        // Pair hashing follows @openzeppelin/merkle-tree's StandardMerkleTree convention:
+        // sort siblings before hashing so tree construction is order-independent.
         bytes32 computed = leafHash(account, tier);
         for (uint256 i = 0; i < proof.length; i++) {
             bytes32 sibling = proof[i];
